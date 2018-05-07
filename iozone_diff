@@ -1,0 +1,98 @@
+#!/bin/bash
+
+usage()
+{
+	echo "Usage: $0 iozone_output1 iozone_output2" >&2
+}
+
+if [ "$2" = "" -o "$3" != "" ]; then
+	usage
+	exit 1
+fi
+
+DATA1="$1"
+DATA2="$2"
+
+awk 'function delta_percent(x, y) {
+	return (y - x) * 100 / x;
+}
+BEGIN {
+	data1	= "'"$DATA1"'";
+	data2	= "'"$DATA2"'";
+
+	line	= 1;
+	data	= "false";
+	while ((getline < data1) > 0) {
+		if ($1 == "kB") {
+			data	= "true";
+		}
+		else {
+			if (data == "true") {
+				if (NF < 3) {
+					data	= "done";
+				}
+				else {
+					print;
+
+					key	= $1 "-" $2;
+					line_idx[line++]	= key;
+
+					for (i = 3; i <= NF; i++) {
+						idx	= key "-" i;
+						result1[idx]	= $(i);
+					}
+					if (max_NF == 0) {
+						max_NF		= NF;
+					}
+				}
+			}
+		}
+	}
+	close(data1);
+	line_max	= line;
+
+	data	= "false";
+	while ((getline < data2) > 0) {
+		if ($1 == "kB") {
+			data	= "true";
+		}
+		else {
+			if (data == "true") {
+				if (NF < 3) {
+					data	= "done";
+				}
+				else {
+					print;
+					key	= $1 "-" $2;
+
+					for (i = 3; i <= NF; i++) {
+						idx	= key "-" i;
+						result2[idx]	= $(i);
+					}
+				}
+			}
+		}
+	}
+	close(data2);
+
+	for (key in result1) {
+		delta[key]	= delta_percent(result1[key], result2[key]);
+#		printf("%-15s %+.2f%%\n", key, delta[key]);
+	}
+	for (line = 1; line < line_max; line++) {
+		size	= line_idx[line];
+		reclen	= line_idx[line];
+		sub(/-.*/, "", size);
+		sub(/.*-/, "", reclen);
+
+#		printf("Line %3d %15s  ", line, line_idx[line]);
+		printf("          %6d   %5d ", size, reclen);
+		for (i = 3; i <= max_NF; i++) {
+			if (i == 11) {
+				printf("  ");
+			}
+			printf(" %+7.2f%%", delta[line_idx[line] "-" i]);
+		}
+		printf("\n");
+	}
+}'
